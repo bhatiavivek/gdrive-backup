@@ -239,7 +239,7 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
         # Process subfolders
         subfolder_query = f"'{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         subfolder_results = (
-            service.files().list(q=subfolder_query, fields="files(id)").execute()
+            service.files().list(q=subfolder_query, fields="files(id, name)").execute()
         )
         subfolders = subfolder_results.get("files", [])
 
@@ -259,6 +259,11 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
 
     except HttpError as error:
         logger.error(f"An error occurred while processing folder {folder_id}: {error}")
+    except KeyError as key_error:
+        logger.error(
+            f"KeyError in process_folder: {key_error}. Subfolder data: {subfolder}"
+        )
+        raise
 
 
 def download_and_save_file(service, file, filepath, conn, logger):
