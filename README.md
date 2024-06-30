@@ -1,29 +1,28 @@
-# Google Drive Backup
+# Google Drive Backup Script
 
-Google Drive Backup is a Python script that allows you to backup your Google Drive contents to a local directory. It replicates the folder structure of your Google Drive, handles file conversions for Google Workspace formats, and provides options for incremental backups based on date ranges.
+This Python script provides a robust solution for backing up your Google Drive contents to your local machine. It supports incremental backups, file versioning, and handles both Google Workspace files and standard file formats.
 
 ## Features
 
-- Authenticate with Google Drive using OAuth 2.0
-- Replicate Google Drive folder structure locally
-- Convert Google Workspace format files (Docs, Sheets, Slides) to standard formats
-- Handle duplicate filenames and file versions
-- Filter files based on modification date range
-- Store file metadata in a local SQLite database
-- Flexible logging options (console and/or file)
+- Incremental backups: Only download new or modified files
+- File versioning: Keep multiple versions of files as they change
+- Google Workspace file conversion: Automatically convert Google Docs, Sheets, and Slides to Microsoft Office formats
+- Flexible date range: Specify start and end dates for your backup
+- Database tracking: Keep track of downloaded files and their versions
+- Logging: Configurable logging to console and/or file
 
 ## Prerequisites
 
-- Python 3.7 or higher
+- Python 3.6 or higher
 - Google Cloud project with the Drive API enabled
-- OAuth 2.0 credentials (client_secret.json) for your Google Cloud project
+- OAuth 2.0 Client ID credentials
 
 ## Installation
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/google-drive-backup.git
-   cd google-drive-backup
+   git clone https://github.com/yourusername/gdrive-backup.git
+   cd gdrive-backup
    ```
 
 2. Install the required Python packages:
@@ -31,61 +30,64 @@ Google Drive Backup is a Python script that allows you to backup your Google Dri
    pip install -r requirements.txt
    ```
 
-3. Place your `credentials.json` file (OAuth 2.0 client ID) in the project directory.
+3. Set up Google Cloud credentials (see below)
+
+## Google Cloud Setup
+
+To use this script, you need to set up a Google Cloud project and obtain credentials:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Google Drive API for your project
+4. Create OAuth 2.0 Client ID credentials:
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth client ID"
+   - Choose "Desktop app" as the application type
+   - Download the client configuration and save it as `credentials.json` in the script directory
 
 ## Usage
 
-Run the script using the following command:
+Run the script with the following command:
 
 ```
-python gdrive_backup.py [OPTIONS]
+python gdrive-backup.py [OPTIONS]
 ```
 
-### Options:
+Options:
+- `--backup-dir PATH`: Directory to store downloaded files (default: ~/gdrive-backup)
+- `--start-date DATE`: Start date for file sync (YYYY-MM-DD) (default: 2010-01-01)
+- `--end-date DATE`: End date for file sync (YYYY-MM-DD) (default: today)
+- `--log-console / --no-log-console`: Enable/disable console logging (default: disabled)
+- `--log-file / --no-log-file`: Enable/disable file logging (default: disabled)
+- `--log-level LEVEL`: Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) (default: INFO)
 
-- `--backup-dir DIRECTORY`: Directory to store downloaded files. Default is ~/gdrive-backup
-- `--start-date [%Y-%m-%d]`: Start date for file sync (YYYY-MM-DD). Default is 2010-01-01.
-- `--end-date [%Y-%m-%d]`: End date for file sync (YYYY-MM-DD). Default is today.
-- `--log-console / --no-log-console`: Enable/disable console logging. Default is disabled.
-- `--log-file / --no-log-file`: Enable/disable file logging. Default is disabled.
-- `--log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]`: Set the logging level. Default is INFO.
-- `--help`: Show the help message and exit.
-
-### Example:
-
-To backup files modified between January 1, 2023, and June 30, 2023, with console logging enabled:
-
+Example:
 ```
-python gdrive_backup.py --backup-dir ~/my_drive_backup --start-date 2023-01-01 --end-date 2023-06-30 --log-console --log-level INFO
+python gdrive-backup.py --backup-dir /path/to/backup --start-date 2023-01-01 --log-console --log-level DEBUG
 ```
 
 ## File Structure
 
-The backed-up files will be organized in the following structure:
-
+The backed-up files will be organized as follows:
 ```
 backup_dir/
-├── File1.ext
-├── File2.ext
-├── Folder1/
-│   ├── SubFile1.ext
-│   └── SubFolder/
-│       └── SubSubFile1.ext
-└── Google Workspace Files/
-    ├── Document1.docx
-    ├── Spreadsheet1.xlsx
-    └── Presentation1.pptx
+├── file1.ext
+├── file2.ext
+├── folder1/
+│   ├── file3.ext
+│   └── file4.ext
+├── Google Docs/
+│   ├── document1.docx
+│   └── document2.docx
+└── __db__/
+    └── drive_backup.db
 ```
 
-## Limitations
-
-- The script currently does not support backing up Google Forms or Google Sites.
-- Shared drives (formerly Team Drives) are not supported in this version.
-- Files larger than 1GB may experience issues during download.
+Versioned files will be named with a version suffix, e.g., `file1.v02.ext`.
 
 ## Contributing
 
-Contributions to the Google Drive Backup project are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
@@ -93,4 +95,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Disclaimer
 
-This project is not affiliated with, officially maintained, or endorsed by Google. Use at your own risk.
+This script is not officially associated with Google. Use it at your own risk. Always ensure you have additional backups of your important data.
