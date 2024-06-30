@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "4613e2b7cb76ce579864b597ace4b4cc4736ac5684370ca57d53c35fe1ddea95"
+            "sha256": "19f4a77a8a858a9a58351e32f6a0033e3c562e9d06cfc823724189db7c6ad098"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -134,6 +134,7 @@
                 "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28",
                 "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de"
             ],
+            "index": "pypi",
             "markers": "python_version >= '3.7'",
             "version": "==8.1.7"
         },
@@ -199,12 +200,12 @@
         },
         "google-api-python-client": {
             "hashes": [
-                "sha256:4a8f0bea651a212997cc83c0f271fc86f80ef93d1cee9d84de7dfaeef2a858b6",
-                "sha256:ba05d60f6239990b7994f6328f17bb154c602d31860fb553016dc9f8ce886945"
+                "sha256:91742fa4c779d48456c0256ef346fa1cc185ba427176d3277e35141fa3268026",
+                "sha256:b552a28123ed95493035698db80e8ed78c9106a8b422e63a175150b9b55b704e"
             ],
             "index": "pypi",
             "markers": "python_version >= '3.7'",
-            "version": "==2.134.0"
+            "version": "==2.135.0"
         },
         "google-auth": {
             "hashes": [
@@ -240,12 +241,12 @@
         },
         "harlequin": {
             "hashes": [
-                "sha256:2ef9d77e9e5406dfe942dcb81b639f97e7524638f8f34b6725def326a804a0d5",
-                "sha256:c2095c1239067a02d420f69800c3ee807faa203d738cf7f51eddeb73b784e852"
+                "sha256:7b1ffea71a27fb2550313b9854e6ba68b53f9305e89c5666e2d6822513efbf6f",
+                "sha256:b18e1d9f55ee26ff23c60a9867a8e107271e8f8ff6efe55d84b00b75d279ce36"
             ],
             "index": "pypi",
             "markers": "python_full_version >= '3.8.1' and python_full_version < '4.0.0'",
-            "version": "==1.21.0"
+            "version": "==1.22.1"
         },
         "httplib2": {
             "hashes": [
@@ -533,7 +534,7 @@
                 "sha256:a1bac0ce561155ecc3ed78ca94d3c9378656ad4c94c1270de543f621420f94ad",
                 "sha256:f9db75911801ed778fe61bb643079ff86601aca99fcae6345aa67292038fb742"
             ],
-            "markers": "python_version > '3.0'",
+            "markers": "python_version >= '3.1'",
             "version": "==3.1.2"
         },
         "pyperclip": {

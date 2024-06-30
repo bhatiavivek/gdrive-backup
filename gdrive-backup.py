@@ -119,12 +119,13 @@ def convert_google_file(service, file_id, mime_type, filepath, logger):
 
 
 def create_folder_structure(service, folder_id, local_path, conn, logger):
-    logger.info(f"create_folder_structure: {local_path}")
     try:
         # Query to get folder details
         folder = service.files().get(fileId=folder_id, fields="name,parents").execute()
         folder_name = sanitize_filename(folder["name"])
-        folder_path = os.path.join(local_path, folder_name)
+
+        # Use the provided local_path as is, since it should already include the folder name
+        folder_path = local_path
 
         # Create the folder if it doesn't exist
         if not os.path.exists(folder_path):
@@ -149,7 +150,11 @@ def create_folder_structure(service, folder_id, local_path, conn, logger):
 
         # Recursively create subfolders
         for subfolder in subfolders:
-            create_folder_structure(service, subfolder["id"], folder_path, conn, logger)
+            subfolder_name = sanitize_filename(subfolder["name"])
+            subfolder_path = os.path.join(folder_path, subfolder_name)
+            create_folder_structure(
+                service, subfolder["id"], subfolder_path, conn, logger
+            )
 
         return folder_path
 
@@ -169,7 +174,10 @@ def setup_logging(log_console, log_file, log_level):
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)  # Capture all levels
 
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    # Create a formatter that includes the line number
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+    )
 
     if log_console:
         console_handler = logging.StreamHandler()
@@ -185,15 +193,15 @@ def setup_logging(log_console, log_file, log_level):
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
+    # If no logging is enabled, add a NullHandler to suppress warnings
+    if not log_console and not log_file:
+        logger.addHandler(logging.NullHandler())
+
     return logger
 
 
 def process_folder(service, folder_id, local_path, conn, start_date, end_date, logger):
     try:
-        folder_details = service.files().get(fileId=folder_id, fields="name").execute()
-        logger.info(
-            f"Processing folder: {folder_details.get('name', 'Unknown')} (ID: {folder_id})"
-        )
         # Create folder structure first
         folder_path = create_folder_structure(
             service, folder_id, local_path, conn, logger
@@ -249,9 +257,8 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
         subfolders = subfolder_results.get("files", [])
 
         for subfolder in subfolders:
-            subfolder_path = os.path.join(
-                folder_path, sanitize_filename(subfolder["name"])
-            )
+            subfolder_name = sanitize_filename(subfolder["name"])
+            subfolder_path = os.path.join(folder_path, subfolder_name)
             process_folder(
                 service,
                 subfolder["id"],
