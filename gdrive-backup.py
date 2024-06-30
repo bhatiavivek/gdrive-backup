@@ -318,11 +318,8 @@ def download_and_save_file(service, file, folder_path, conn, logger):
                 logger.info(f"File {filename} hasn't changed. Skipping download.")
                 return
 
-            # File has changed, create a new version
-            filepath = get_file_path(folder_path, filename, new_version)
-        else:
-            # This is a new file
-            filepath = get_file_path(folder_path, filename, new_version)
+        # File is new or has changed, create a new version
+        filepath = get_file_path(folder_path, filename, new_version)
 
         # Handle Google Workspace files
         if mime_type.startswith("application/vnd.google-apps"):
