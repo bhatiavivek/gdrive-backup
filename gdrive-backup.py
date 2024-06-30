@@ -119,6 +119,7 @@ def convert_google_file(service, file_id, mime_type, filepath, logger):
 
 
 def create_folder_structure(service, folder_id, local_path, conn, logger):
+    logger.info(f"create_folder_structure: {local_path}")
     try:
         # Query to get folder details
         folder = service.files().get(fileId=folder_id, fields="name,parents").execute()
@@ -189,6 +190,10 @@ def setup_logging(log_console, log_file, log_level):
 
 def process_folder(service, folder_id, local_path, conn, start_date, end_date, logger):
     try:
+        folder_details = service.files().get(fileId=folder_id, fields="name").execute()
+        logger.info(
+            f"Processing folder: {folder_details.get('name', 'Unknown')} (ID: {folder_id})"
+        )
         # Create folder structure first
         folder_path = create_folder_structure(
             service, folder_id, local_path, conn, logger
