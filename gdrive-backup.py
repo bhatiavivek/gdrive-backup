@@ -46,8 +46,9 @@ def init_database(db_file):
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS files
-        (id TEXT PRIMARY KEY, name TEXT, mimeType TEXT, version INTEGER,
-        parentId TEXT, modifiedTime TEXT)
+        (id TEXT, name TEXT, mimeType TEXT, version INTEGER,
+        parentId TEXT, modifiedTime TEXT, localPath TEXT,
+        PRIMARY KEY (id, version))
     """
     )
     cursor.execute(
@@ -68,18 +69,28 @@ def sanitize_filename(filename):
     return filename
 
 
-def get_next_version_number(filepath):
-    base, ext = os.path.splitext(filepath)
-    counter = 1
-    while os.path.exists(f"{base}.v{counter:02d}{ext}"):
-        counter += 1
-    return counter
+def get_next_version_number(cursor, file_id):
+    cursor.execute("SELECT MAX(version) FROM files WHERE id = ?", (file_id,))
+    max_version = cursor.fetchone()[0]
+    return (max_version or 0) + 1
+
+
+def get_file_path(base_path, filename, version):
+    base, ext = os.path.splitext(filename)
+    if version > 1:
+        return os.path.join(base_path, f"{base}.v{version:02d}{ext}")
+    return os.path.join(base_path, filename)
 
 
 def handle_duplicate(filepath):
     base, ext = os.path.splitext(filepath)
     version = get_next_version_number(filepath)
     return f"{base}.v{version:02d}{ext}"
+
+
+def ensure_dir_exists(filepath):
+    directory = os.path.dirname(filepath)
+    os.makedirs(directory, exist_ok=True)
 
 
 def convert_google_file(service, file_id, mime_type, filepath, logger):
@@ -113,7 +124,8 @@ def convert_google_file(service, file_id, mime_type, filepath, logger):
             logger.debug(f"Download {int(status.progress() * 100)}%.")
 
         fh.seek(0)
-        converted_filepath = filepath + file_extension
+        converted_filepath = f"{filepath}{file_extension}"
+        ensure_dir_exists(converted_filepath)
         with open(converted_filepath, "wb") as f:
             f.write(fh.getvalue())
 
@@ -247,9 +259,7 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
             items = results.get("files", [])
 
             for item in items:
-                item_name = sanitize_filename(item["name"])
-                item_path = os.path.join(folder_path, item_name)
-                download_and_save_file(service, item, item_path, conn, logger)
+                download_and_save_file(service, item, folder_path, conn, logger)
 
             page_token = results.get("nextPageToken")
             if not page_token:
@@ -284,22 +294,35 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
         raise
 
 
-def download_and_save_file(service, file, filepath, conn, logger):
+def download_and_save_file(service, file, folder_path, conn, logger):
     try:
         file_id = file["id"]
+        filename = file["name"]
         mime_type = file["mimeType"]
         modified_time = file["modifiedTime"]
 
-        # Check if the file already exists in our database
         cursor = conn.cursor()
-        cursor.execute("SELECT modifiedTime FROM files WHERE id = ?", (file_id,))
+
+        # Check if the file already exists in our database
+        cursor.execute(
+            "SELECT modifiedTime, localPath FROM files WHERE id = ? ORDER BY version DESC LIMIT 1",
+            (file_id,),
+        )
         result = cursor.fetchone()
 
+        new_version = get_next_version_number(cursor, file_id)
+
         if result:
-            stored_modified_time = result[0]
+            stored_modified_time, stored_path = result
             if stored_modified_time == modified_time:
-                logger.info(f"File {file['name']} hasn't changed. Skipping download.")
+                logger.info(f"File {filename} hasn't changed. Skipping download.")
                 return
+
+            # File has changed, create a new version
+            filepath = get_file_path(folder_path, filename, new_version)
+        else:
+            # This is a new file
+            filepath = get_file_path(folder_path, filename, new_version)
 
         # Handle Google Workspace files
         if mime_type.startswith("application/vnd.google-apps"):
@@ -321,11 +344,7 @@ def download_and_save_file(service, file, filepath, conn, logger):
 
             fh.seek(0)
 
-            # Check if file already exists
-            if os.path.exists(filepath):
-                # File exists, create a new version
-                filepath = handle_duplicate(filepath)
-
+            ensure_dir_exists(filepath)
             with open(filepath, "wb") as f:
                 f.write(fh.getvalue())
 
@@ -334,17 +353,18 @@ def download_and_save_file(service, file, filepath, conn, logger):
         # Update database
         cursor.execute(
             """
-            INSERT OR REPLACE INTO files 
-            (id, name, mimeType, version, parentId, modifiedTime)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO files 
+            (id, name, mimeType, version, parentId, modifiedTime, localPath)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
             (
-                file["id"],
-                file["name"],
-                file["mimeType"],
-                file.get("version"),
+                file_id,
+                filename,
+                mime_type,
+                new_version,
                 file["parents"][0] if "parents" in file else None,
                 modified_time,
+                filepath,
             ),
         )
         conn.commit()
