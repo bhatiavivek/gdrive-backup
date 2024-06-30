@@ -34,8 +34,14 @@ def authenticate():
     return creds
 
 
-def init_database():
-    conn = sqlite3.connect(DATABASE_FILE)
+def get_db_path(backup_dir):
+    db_dir = os.path.join(backup_dir, "__db__")
+    os.makedirs(db_dir, exist_ok=True)
+    return os.path.join(db_dir, "drive_backup.db")
+
+
+def init_database(db_file):
+    conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -62,17 +68,18 @@ def sanitize_filename(filename):
     return filename
 
 
-def handle_duplicate(filepath, is_version=False):
+def get_next_version_number(filepath):
     base, ext = os.path.splitext(filepath)
     counter = 1
-    new_filepath = filepath
-    while os.path.exists(new_filepath):
-        if is_version:
-            new_filepath = f"{base}.v{counter:02d}{ext}"
-        else:
-            new_filepath = f"{base}.{counter:02d}{ext}"
+    while os.path.exists(f"{base}.v{counter:02d}{ext}"):
         counter += 1
-    return new_filepath
+    return counter
+
+
+def handle_duplicate(filepath):
+    base, ext = os.path.splitext(filepath)
+    version = get_next_version_number(filepath)
+    return f"{base}.v{version:02d}{ext}"
 
 
 def convert_google_file(service, file_id, mime_type, filepath, logger):
@@ -209,13 +216,12 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
         if not folder_path:
             return  # Skip processing if folder creation failed
 
+        # Adjust end_date to be 23:59:59 of the specified day
+        end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
         # Convert dates to RFC 3339 format for the API query
-        start_date_str = start_date.astimezone(timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
-        end_date_str = end_date.astimezone(timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
+        start_date_str = start_date.astimezone(timezone.utc).isoformat()
+        end_date_str = end_date.astimezone(timezone.utc).isoformat()
 
         # Query to get files in the current folder within the specified date range
         query = (
@@ -282,6 +288,18 @@ def download_and_save_file(service, file, filepath, conn, logger):
     try:
         file_id = file["id"]
         mime_type = file["mimeType"]
+        modified_time = file["modifiedTime"]
+
+        # Check if the file already exists in our database
+        cursor = conn.cursor()
+        cursor.execute("SELECT modifiedTime FROM files WHERE id = ?", (file_id,))
+        result = cursor.fetchone()
+
+        if result:
+            stored_modified_time = result[0]
+            if stored_modified_time == modified_time:
+                logger.info(f"File {file['name']} hasn't changed. Skipping download.")
+                return
 
         # Handle Google Workspace files
         if mime_type.startswith("application/vnd.google-apps"):
@@ -302,17 +320,22 @@ def download_and_save_file(service, file, filepath, conn, logger):
                 logger.debug(f"Download {int(status.progress() * 100)}%.")
 
             fh.seek(0)
+
+            # Check if file already exists
+            if os.path.exists(filepath):
+                # File exists, create a new version
+                filepath = handle_duplicate(filepath)
+
             with open(filepath, "wb") as f:
                 f.write(fh.getvalue())
 
-        filepath = handle_duplicate(filepath, is_version="version" in file)
         logger.info(f"File downloaded: {filepath}")
 
         # Update database
-        cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO files (id, name, mimeType, version, parentId, modifiedTime)
+            INSERT OR REPLACE INTO files 
+            (id, name, mimeType, version, parentId, modifiedTime)
             VALUES (?, ?, ?, ?, ?, ?)
         """,
             (
@@ -321,7 +344,7 @@ def download_and_save_file(service, file, filepath, conn, logger):
                 file["mimeType"],
                 file.get("version"),
                 file["parents"][0] if "parents" in file else None,
-                file["modifiedTime"],
+                modified_time,
             ),
         )
         conn.commit()
@@ -333,7 +356,8 @@ def download_and_save_file(service, file, filepath, conn, logger):
 def backup_drive(backup_dir, start_date, end_date, logger):
     creds = authenticate()
     service = build("drive", "v3", credentials=creds)
-    conn = init_database()
+    db_file = get_db_path(backup_dir)
+    conn = init_database(db_file)
 
     try:
         os.makedirs(backup_dir, exist_ok=True)
@@ -382,6 +406,13 @@ def backup_drive(backup_dir, start_date, end_date, logger):
 def main(backup_dir, start_date, end_date, log_console, log_file, log_level):
     """Sync and organize files from Google Drive to local storage."""
     logger = setup_logging(log_console, log_file, getattr(logging, log_level.upper()))
+
+    # Ensure start_date is at the beginning of the day
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Ensure end_date is at the end of the day
+    end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
     logger.info(f"Starting Google Drive backup from {start_date} to {end_date}")
     logger.info(f"Backup directory: {backup_dir}")
 
