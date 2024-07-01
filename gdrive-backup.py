@@ -13,6 +13,16 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+    after_log,
+)
+import requests.exceptions
+
 
 # Global variables
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -59,6 +69,53 @@ def init_database(db_file):
     )
     conn.commit()
     return conn
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(
+        (
+            requests.exceptions.RequestException,
+            requests.exceptions.HTTPError,
+            TimeoutError,
+        )
+    ),
+    before_sleep=before_sleep_log(logging.getLogger(), logging.INFO),
+    after=after_log(logging.getLogger(), logging.INFO),
+)
+def make_api_request(service, request_func, logger, *args, **kwargs):
+    try:
+        return request_func(*args, **kwargs).execute()
+    except (
+        requests.exceptions.RequestException,
+        requests.exceptions.HTTPError,
+        TimeoutError,
+    ) as e:
+        logger.error(f"API request failed: {str(e)}")
+        raise
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(
+        (
+            requests.exceptions.RequestException,
+            requests.exceptions.HTTPError,
+            TimeoutError,
+        )
+    ),
+    before_sleep=before_sleep_log(logging.getLogger(), logging.INFO),
+    after=after_log(logging.getLogger(), logging.INFO),
+)
+def download_file(downloader, logger):
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+        if status:
+            logger.debug(f"Download {int(status.progress() * 100)}%.")
+    logger.info("Download completed.")
 
 
 def sanitize_filename(filename):
@@ -118,10 +175,8 @@ def convert_google_file(service, file_id, mime_type, filepath, logger):
         )
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-            logger.debug(f"Download {int(status.progress() * 100)}%.")
+
+        download_file(downloader, logger)
 
         fh.seek(0)
         converted_filepath = f"{filepath}{file_extension}"
@@ -246,15 +301,14 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
 
         page_token = None
         while True:
-            results = (
-                service.files()
-                .list(
-                    q=query,
-                    fields="nextPageToken, files(id, name, mimeType, modifiedTime, parents, version)",
-                    pageSize=1000,
-                    pageToken=page_token,
-                )
-                .execute()
+            results = make_api_request(
+                service,
+                service.files().list,
+                logger,
+                q=query,
+                fields="nextPageToken, files(id, name, mimeType, modifiedTime, parents, version)",
+                pageSize=1000,
+                pageToken=page_token,
             )
             items = results.get("files", [])
 
@@ -267,8 +321,12 @@ def process_folder(service, folder_id, local_path, conn, start_date, end_date, l
 
         # Process subfolders
         subfolder_query = f"'{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        subfolder_results = (
-            service.files().list(q=subfolder_query, fields="files(id, name)").execute()
+        subfolder_results = make_api_request(
+            service,
+            service.files().list,
+            logger,
+            q=subfolder_query,
+            fields="files(id, name)",
         )
         subfolders = subfolder_results.get("files", [])
 
@@ -334,10 +392,8 @@ def download_and_save_file(service, file, folder_path, conn, logger):
             request = service.files().get_media(fileId=file_id)
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while done is False:
-                status, done = downloader.next_chunk()
-                logger.debug(f"Download {int(status.progress() * 100)}%.")
+
+            download_file(downloader, logger)
 
             fh.seek(0)
 
