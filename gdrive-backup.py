@@ -192,10 +192,29 @@ def convert_google_file(service, file_id, mime_type, filepath, logger):
         return None
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(
+        (
+            requests.exceptions.RequestException,
+            requests.exceptions.HTTPError,
+            TimeoutError,
+        )
+    ),
+    before_sleep=before_sleep_log(logging.getLogger(), logging.INFO),
+    after=after_log(logging.getLogger(), logging.INFO),
+)
 def create_folder_structure(service, folder_id, local_path, conn, logger):
     try:
         # Query to get folder details
-        folder = service.files().get(fileId=folder_id, fields="name,parents").execute()
+        folder = make_api_request(
+            service,
+            service.files().get,
+            logger,
+            fileId=folder_id,
+            fields="name,parents",
+        )
         folder_name = sanitize_filename(folder["name"])
 
         # Use the provided local_path as is, since it should already include the folder name
@@ -219,7 +238,9 @@ def create_folder_structure(service, folder_id, local_path, conn, logger):
 
         # Query to get subfolders
         query = f"'{folder_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        results = service.files().list(q=query, fields="files(id, name)").execute()
+        results = make_api_request(
+            service, service.files().list, logger, q=query, fields="files(id, name)"
+        )
         subfolders = results.get("files", [])
 
         # Recursively create subfolders
@@ -232,11 +253,11 @@ def create_folder_structure(service, folder_id, local_path, conn, logger):
 
         return folder_path
 
-    except HttpError as error:
+    except Exception as error:
         logger.error(
             f"An error occurred while creating folder structure for {folder_id}: {error}"
         )
-        return None
+        raise
 
 
 def is_file_in_date_range(file_modified_time, start_date, end_date):
