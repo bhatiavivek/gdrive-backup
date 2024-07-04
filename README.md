@@ -2,6 +2,10 @@
 
 This Python script provides a robust solution for backing up your Google Drive contents to your local machine. It supports incremental backups, file versioning, and handles both Google Workspace files and standard file formats.
 
+## Use Case
+
+This is meant as a local last-resort backup in case you lose access to your Google account through carelessness, malice or displeasing the Borg. There's also a [companion script for backing up Google Photos](https://github.com/bhatiavivek/gphoto-backup).
+
 ## Features
 
 - Incremental backups: Only download new or modified files
